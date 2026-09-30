@@ -205,9 +205,9 @@
     <button id="bye-btn" class="action-btn">👋 バイバイ</button>
   </div>
 
-  <!-- 動画再生モーダル（imageフォルダ内の動画を指定） -->
+  <!-- 動画再生モーダル（imageフォルダ内の動画を指定。属性を強化） -->
   <div id="video-modal">
-    <video id="popup-video" src="./image/sample.mp4" controls playsinline></video>
+    <video id="popup-video" src="./image/sample.mp4" controls playsinline webkit-playsinline x5-playsinline preload="auto"></video>
     <button id="close-video-btn">閉じる</button>
   </div>
 
@@ -234,6 +234,8 @@
       <!-- リアル調（3D風テクスチャ） -->
       <img id="tex-real-normal" src="./image/real_test.png" crossorigin="anonymous">
       <img id="tex-real-closed" src="./image/real_test2.png" crossorigin="anonymous">
+      <!-- GLBモデル (imageフォルダ内) -->
+      <a-asset-item id="model-asset" src="./image/model.glb"></a-asset-item>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -249,15 +251,18 @@
         <!-- ぽよっ・消滅アニメーション担当 -->
         <a-entity id="poyo" position="0 0 0" scale="1 1 1">
 
-          <!-- 通常 -->
+          <!-- 2Dキャラクター（板ポリゴン：通常） -->
           <a-plane id="char-normal"
             src="#tex-normal" position="0 0 0" width="1" height="1"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- 目を閉じた差分（初期は非表示） -->
+          <!-- 2Dキャラクター（目を閉じた差分：初期は非表示） -->
           <a-plane id="char-closed"
             src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
+
+          <!-- GLB 3Dモデル（リアル調モード時に表示。黒四角にならないようライトや環境光も考慮） -->
+          <a-entity id="char-glb" gltf-model="#model-asset" position="0 0 0" scale="1 1 1" visible="false"></a-entity>
 
           <!-- キャラクターの名前（初期は非表示） -->
           <a-text 
@@ -288,6 +293,7 @@
     const poyoEl     = document.querySelector('#poyo');
     const charNormal = document.querySelector('#char-normal');
     const charClosed = document.querySelector('#char-closed');
+    const charGlb    = document.querySelector('#char-glb');
     const charName   = document.querySelector('#char-name');
 
     const touchBtn   = document.querySelector('#touch-btn');
@@ -314,7 +320,7 @@
 
     let reacting = false;     // 割り込み防止ロック
     let activeBlink = true;   // 瞬きループ制御用
-    let isRealMode = false;   // リアル調モードフラグ
+    let isRealMode = false;   // リアル調モードフラグ（GLBモデル表示用）
 
     const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
@@ -346,10 +352,25 @@
 
     const wait = ms => new Promise(r => setTimeout(r, ms));
 
-    // フレーム（画像状態・リアル調切替対応）を切り替える関数
+    // 表示モード（アニメ調/リアル調GLB）の切り替え関数
+    function updateDisplayMode() {
+      if (isRealMode) {
+        // リアル調：GLBモデルを表示し、2Dイラストは非表示
+        charNormal.setAttribute('visible', false);
+        charClosed.setAttribute('visible', false);
+        charGlb.setAttribute('visible', true);
+      } else {
+        // アニメ調：GLBを非表示にし、2Dイラストを表示
+        charGlb.setAttribute('visible', false);
+        showFrame('normal');
+      }
+    }
+
+    // 2Dキャラクターの目を開閉する関数
     function showFrame(type) {
-      const normalSrc = isRealMode ? '#tex-real-normal' : '#tex-normal';
-      const closedSrc = isRealMode ? '#tex-real-closed' : '#tex-closed';
+      if (isRealMode) return; // リアル調の時は何もしない
+      const normalSrc = '#tex-normal';
+      const closedSrc = '#tex-closed';
 
       charNormal.setAttribute('src', normalSrc);
       charClosed.setAttribute('src', closedSrc);
@@ -363,20 +384,22 @@
       }
     }
 
-    // 「触る」ボタンを押したときのリアクション
+    // 「触る」ボタンを押したときのリアクション（きゅっと目を閉じるアニメーション含む）
     async function react() {
       if (reacting) return;
       reacting = true;
       try {
-        showFrame('normal');
-        await wait(150);
-        showFrame('closed');
-        await wait(150);
-        showFrame('normal');
+        if (!isRealMode) {
+          showFrame('normal');
+          await wait(150);
+          showFrame('closed'); // きゅっと目を閉じる
+          await wait(150);
+          showFrame('normal');
+        }
 
         await Promise.all([playPoyo(POYO_MS), wait(400)]);
       } finally {
-        showFrame('normal');
+        if (!isRealMode) showFrame('normal');
         poyoEl.object3D.scale.set(1, 1, 1);
         poyoEl.object3D.position.set(0, 0, 0);
         reacting = false;
@@ -398,7 +421,10 @@
     // 「動画を見る」ボタンを押したときの処理
     videoBtn.addEventListener('click', () => {
       videoModal.style.display = 'flex';
-      popupVideo.play().catch(e => console.log("Auto-play prevented:", e));
+      popupVideo.currentTime = 0;
+      popupVideo.play().catch(e => {
+        console.log("Auto-play prevented, waiting for user interaction:", e);
+      });
     });
 
     // 動画モーダルを閉じる処理
@@ -408,26 +434,26 @@
       videoModal.style.display = 'none';
     });
 
-    // 「リアル調にする」ボタンを押したときの処理
+    // 「リアル調にする」ボタンを押したときの処理（GLBモデル表示切替）
     realToggleBtn.addEventListener('click', () => {
       isRealMode = !isRealMode;
       if (isRealMode) {
         realToggleBtn.classList.add('active');
         realToggleBtn.textContent = '✨ アニメ調にする';
-        statusBar.textContent = 'リアル調3D表示に切り替えました';
+        statusBar.textContent = '3Dモデル(GLB)表示に切り替えました';
       } else {
         realToggleBtn.classList.remove('active');
         realToggleBtn.textContent = '🎨 リアル調にする';
         statusBar.textContent = 'アニメ調表示に切り替えました';
       }
-      showFrame('normal');
+      updateDisplayMode();
     });
 
     // キャラクターの見た目を完全に初期化する関数
     function resetCharacter() {
       poyoEl.object3D.scale.set(1, 1, 1);
       poyoEl.object3D.position.set(0, 0, 0);
-      showFrame('normal');
+      updateDisplayMode();
       charName.setAttribute('value', '');
       charName.setAttribute('visible', false);
 
@@ -492,7 +518,7 @@
         const randomWait = Math.random() * 2000 + 2000; 
         await wait(randomWait);
 
-        if (!reacting && activeBlink) {
+        if (!reacting && activeBlink && !isRealMode) {
           reacting = true;
           showFrame('closed');
           await wait(150);
