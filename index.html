@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MindAR WebAR Demo</title>
 
-  <!-- A-Frame 1.4.2 & MindAR 1.2.5 -->
+  <!-- A-Frame & MindAR (安定版CDN) -->
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mind-ar-image-aframe.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
     html, body {
@@ -38,6 +38,7 @@
       z-index: 0;
     }
 
+    /* MindARのデフォルトUIやエラー画面を隠す */
     .mindar-ui-loading, .mindar-ui-compatibility, .mindar-ui-overlay {
       display: none !important;
       opacity: 0 !important;
@@ -107,7 +108,6 @@
       z-index: 10000;
       pointer-events: none;
       white-space: nowrap;
-      transition: background 0.3s ease;
     }
 
     #action-ui {
@@ -132,10 +132,6 @@
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       white-space: nowrap;
-      transition: transform 0.1s;
-    }
-    .action-btn:active {
-      transform: scale(0.95);
     }
     #touch-btn { background: #ec4899; }
     #name-btn  { background: #8b5cf6; }
@@ -175,7 +171,6 @@
       font-weight: bold;
       font-size: 14px;
       cursor: pointer;
-      box-shadow: 0 4px 15px rgba(255,255,255,0.2);
     }
   </style>
 </head>
@@ -191,7 +186,6 @@
   </div>
 
   <div id="video-modal">
-    <!-- リポジトリ内の test.mp4 に合わせて修正 -->
     <video id="popup-video" src="./image/test.mp4" controls playsinline webkit-playsinline x5-playsinline preload="auto"></video>
     <button id="close-video-btn">閉じる</button>
   </div>
@@ -199,7 +193,7 @@
   <div id="overlay">
     <div class="start-card">
       <h2>WebAR デモ</h2>
-      <p>ボタンを押してカメラを許可し、マーカーにかざしてください。自動で瞬きします。</p>
+      <p>ボタンを押してカメラを許可し、マーカーにかざしてください。</p>
       <button id="start-btn">ARを開始する</button>
     </div>
   </div>
@@ -412,7 +406,6 @@
             actionUi.style.display = 'none';
             overlay.style.display = 'flex';
             statusBar.textContent = 'ARを終了しました';
-            statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
             resetCharacter();
             reacting = false;
             resolve();
@@ -443,9 +436,7 @@
       statusBar.textContent = 'カメラ初期化中...';
       const arSystem = sceneEl.systems['mindar-image-system'];
       try {
-        if (!arSystem) {
-          throw new Error('MindAR system not found');
-        }
+        if (!arSystem) throw new Error('MindAR system not found');
         resetCharacter(); 
         await arSystem.start();
         overlay.style.display = 'none';
