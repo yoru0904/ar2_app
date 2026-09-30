@@ -156,37 +156,42 @@
     #touch-btn { background: #ec4899; } /* ピンク：触る */
     #name-btn  { background: #8b5cf6; } /* パープル：名前 */
     #video-btn { background: #0284c7; } /* ブルー：動画を見る */
-    #bye-btn   { background: #ef4444; } /* レッド：バイバイ */
+    #bye-btn   - background: #ef4444; } /* レッド：バイバイ */
+    #bye-btn   { background: #ef4444; }
 
-    /* 動画モーダルウィンドウ */
+    /* 動画再生モーダルウィンドウ（ボタンが被らないよう配置改善） */
     #video-modal {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.9);
       z-index: 20000;
       display: none;
       justify-content: center;
       align-items: center;
       flex-direction: column;
+      gap: 20px;
     }
     #video-modal video {
       width: 90%;
-      max-width: 500px;
+      max-width: 400px;
+      max-height: 60vh;
       border-radius: 12px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      object-fit: contain;
     }
     #close-video-btn {
-      margin-top: 20px;
       background: #ffffff;
       color: #0f172a;
       border: none;
-      padding: 10px 24px;
+      padding: 12px 32px;
       border-radius: 9999px;
       font-weight: bold;
+      font-size: 14px;
       cursor: pointer;
+      box-shadow: 0 4px 15px rgba(255,255,255,0.2);
     }
   </style>
 </head>
@@ -205,7 +210,7 @@
     <button id="bye-btn" class="action-btn">👋 バイバイ</button>
   </div>
 
-  <!-- 動画再生モーダル（imageフォルダ内の動画を指定。属性を強化） -->
+  <!-- 動画再生モーダル -->
   <div id="video-modal">
     <video id="popup-video" src="./image/sample.mp4" controls playsinline webkit-playsinline x5-playsinline preload="auto"></video>
     <button id="close-video-btn">閉じる</button>
@@ -231,12 +236,13 @@
       <!-- アニメ調（通常） -->
       <img id="tex-normal" src="./image/test.png" crossorigin="anonymous">
       <img id="tex-closed" src="./image/test2.png" crossorigin="anonymous">
-      <!-- リアル調（3D風テクスチャ） -->
-      <img id="tex-real-normal" src="./image/real_test.png" crossorigin="anonymous">
-      <img id="tex-real-closed" src="./image/real_test2.png" crossorigin="anonymous">
       <!-- GLBモデル (imageフォルダ内) -->
       <a-asset-item id="model-asset" src="./image/model.glb"></a-asset-item>
     </a-assets>
+
+    <!-- ライト追加（GLBが黒くなるのを防ぐため） -->
+    <a-entity light="type: ambient; color: #FFF; intensity: 1.0"></a-entity>
+    <a-entity light="type: directional; color: #FFF; intensity: 0.8" position="-1 2 2"></a-entity>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
@@ -261,8 +267,8 @@
             src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- GLB 3Dモデル（リアル調モード時に表示。黒四角にならないようライトや環境光も考慮） -->
-          <a-entity id="char-glb" gltf-model="#model-asset" position="0 0 0" scale="1 1 1" visible="false"></a-entity>
+          <!-- GLB 3Dモデル（リアル調モード時に表示） -->
+          <a-entity id="char-glb" gltf-model="#model-asset" position="0 0 0" scale="1 1 1" visible="false" animation-mixer></a-entity>
 
           <!-- キャラクターの名前（初期は非表示） -->
           <a-text 
@@ -355,12 +361,10 @@
     // 表示モード（アニメ調/リアル調GLB）の切り替え関数
     function updateDisplayMode() {
       if (isRealMode) {
-        // リアル調：GLBモデルを表示し、2Dイラストは非表示
         charNormal.setAttribute('visible', false);
         charClosed.setAttribute('visible', false);
         charGlb.setAttribute('visible', true);
       } else {
-        // アニメ調：GLBを非表示にし、2Dイラストを表示
         charGlb.setAttribute('visible', false);
         showFrame('normal');
       }
@@ -368,7 +372,7 @@
 
     // 2Dキャラクターの目を開閉する関数
     function showFrame(type) {
-      if (isRealMode) return; // リアル調の時は何もしない
+      if (isRealMode) return;
       const normalSrc = '#tex-normal';
       const closedSrc = '#tex-closed';
 
@@ -434,7 +438,7 @@
       videoModal.style.display = 'none';
     });
 
-    // 「リアル調にする」ボタンを押したときの処理（GLBモデル表示切替）
+    // 「リアル調にする」ボタンを押したときの処理
     realToggleBtn.addEventListener('click', () => {
       isRealMode = !isRealMode;
       if (isRealMode) {
@@ -470,10 +474,10 @@
     async function byeAndExit() {
       if (reacting) return;
       reacting = true;
-      activeBlink = false; // 瞬きを停止
+      activeBlink = false;
 
       const start = performance.now();
-      const duration = 1200; // 1.2秒かけて消滅
+      const duration = 1200;
 
       return new Promise(resolve => {
         function particleFrame(now) {
