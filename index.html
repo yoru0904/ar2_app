@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MindAR WebAR Demo</title>
 
-  <!-- A-Frame & MindAR (安定版CDN) -->
+  <!-- A-Frame & MindAR 1.2.5 -->
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
@@ -36,13 +36,6 @@
       height: 100vh !important;
       object-fit: cover !important;
       z-index: 0;
-    }
-
-    /* MindARのデフォルトUIやエラー画面を隠す */
-    .mindar-ui-loading, .mindar-ui-compatibility, .mindar-ui-overlay {
-      display: none !important;
-      opacity: 0 !important;
-      visibility: hidden !important;
     }
 
     #overlay {
@@ -198,10 +191,11 @@
     </div>
   </div>
 
+  <!-- 修正点: mindar-imageではなく mindar-image="imageTargetSrc: ...;" を削除し、属性名を専用の形式に合わせます -->
   <a-scene
     id="ar-scene"
     embedded
-    mindar-image="imageTargetSrc: ./mark.mind; autoStart: false;"
+    mindar-image="imageTargetSrc: ./mark.mind;"
     color-space="sRGB"
     renderer="colorManagement: true, physicallyCorrectLights: true"
     vr-mode-ui="enabled: false"
@@ -362,6 +356,7 @@
     function resetCharacter() {
       poyoEl.object3D.scale.set(1, 1, 1);
       poyoEl.object3D.position.set(0, 0, 0);
+      showData = 'normal';
       showFrame('normal');
       charName.setAttribute('value', '');
       charName.setAttribute('visible', false);
