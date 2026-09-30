@@ -101,14 +101,14 @@
       transition: background 0.3s ease;
     }
 
-    /* 画面下部の操作用UIボタン */
+    /* 画面下部の操作用UIボタン（3つ並び） */
     #action-ui {
       position: fixed;
       bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 16px;
+      gap: 10px;
       z-index: 10000;
       display: none; /* 初期状態は非表示 */
     }
@@ -117,9 +117,9 @@
       appearance: none;
       border: none;
       color: white;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: bold;
-      padding: 12px 24px;
+      padding: 12px 16px;
       border-radius: 9999px;
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -130,6 +130,7 @@
       transform: scale(0.95);
     }
     #touch-btn { background: #ec4899; } /* ピンク：触る */
+    #name-btn  { background: #8b5cf6; } /* パープル：名前をつける */
     #bye-btn   { background: #ef4444; } /* レッド：バイバイ */
   </style>
 </head>
@@ -137,9 +138,10 @@
 
   <div id="status-bar">カメラ起動準備完了</div>
 
-  <!-- 操作用UIボタン -->
+  <!-- 操作用UIボタン（触る・名前をつける・バイバイ） -->
   <div id="action-ui">
     <button id="touch-btn" class="action-btn">✨ 触る</button>
+    <button id="name-btn" class="action-btn">✏️ 名前</button>
     <button id="bye-btn" class="action-btn">👋 バイバイ</button>
   </div>
 
@@ -188,9 +190,12 @@
             src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- 「！」（test3.png。少し頭上かつ手前に配置して重なりを解消） -->
+          <!-- ================================================= -->
+          <!-- 【！マークの位置変更】position="X Y Z" を変更してください -->
+          <!-- X:左右, Y:上下(大きいほど上), Z:手前奥(大きいほど手前) -->
+          <!-- ================================================= -->
           <a-plane id="excl"
-            src="#tex-excl" position="0 0.3 0.05" width="0.5" height="0.5" visible="false"
+            src="#tex-excl" position="3 0.5 0.05" width="0.5" height="0.5" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
           <!-- キャラクターの名前（ネームプレート） -->
@@ -225,6 +230,7 @@
     const charName   = document.querySelector('#char-name');
 
     const touchBtn   = document.querySelector('#touch-btn');
+    const nameBtn    = document.querySelector('#name-btn');
     const byeBtn     = document.querySelector('#bye-btn');
 
     /* ---------- 調整用の設定 ---------- */
@@ -311,6 +317,15 @@
     }
 
     touchBtn.addEventListener('click', react);
+
+    // 「名前」ボタンを押したときの処理（自由に入力して変更）
+    nameBtn.addEventListener('click', () => {
+      const currentName = charName.getAttribute('value');
+      const newName = prompt('キャラクターの名前を入力してください:', currentName);
+      if (newName !== null && newName.trim() !== '') {
+        charName.setAttribute('value', newName.trim());
+      }
+    });
 
     // キャラクターの見た目を完全に初期化する関数
     function resetCharacter() {
