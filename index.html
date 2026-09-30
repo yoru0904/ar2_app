@@ -141,7 +141,7 @@
   <!-- 操作用UIボタン（触る・名前をつける・バイバイ） -->
   <div id="action-ui">
     <button id="touch-btn" class="action-btn">✨ 触る</button>
-    <button id="name-btn" class="action-btn">✏️ 名前</button>
+    <button id="name-btn" class="action-btn">✏️️ 名前</button>
     <button id="bye-btn" class="action-btn">👋 バイバイ</button>
   </div>
 
@@ -190,22 +190,20 @@
             src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- ================================================= -->
-          <!-- 【！マークの位置変更】position="X Y Z" を変更してください -->
-          <!-- X:左右, Y:上下(大きいほど上), Z:手前奥(大きいほど手前) -->
-          <!-- ================================================= -->
+          <!-- ！マーク（初期は非表示） -->
           <a-plane id="excl"
-            src="#tex-excl" position="5 0.5 0.05" width="0.5" height="0.5" visible="false"
+            src="#tex-excl" position="5 0.4 0.05" width="0.5" height="0.5" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- キャラクターの名前（ネームプレート） -->
+          <!-- キャラクターの名前（初期は非表示） -->
           <a-text 
             id="char-name"
-            value="キャラクター名" 
+            value="" 
             position="0 0.6 0.02" 
             align="center" 
             color="#ffffff" 
             scale="0.8 0.8 0.8"
+            visible="false"
             side="double">
           </a-text>
 
@@ -318,12 +316,13 @@
 
     touchBtn.addEventListener('click', react);
 
-    // 「名前」ボタンを押したときの処理（自由に入力して変更）
+    // 「名前」ボタンを押したときの処理（未入力状態から自分でつける）
     nameBtn.addEventListener('click', () => {
       const currentName = charName.getAttribute('value');
-      const newName = prompt('キャラクターの名前を入力してください:', currentName);
+      const newName = prompt('キャラクターに名前をつけてあげてください:', currentName);
       if (newName !== null && newName.trim() !== '') {
         charName.setAttribute('value', newName.trim());
+        charName.setAttribute('visible', true); // 名前がついたら表示する
       }
     });
 
@@ -332,6 +331,9 @@
       poyoEl.object3D.scale.set(1, 1, 1);
       poyoEl.object3D.position.set(0, 0, 0);
       showFrame('normal');
+      charName.setAttribute('value', '');
+      charName.setAttribute('visible', false); // リセット時は名前も非表示に
+
       [charNormal, charClosed, exclEl, charName].forEach(el => {
         const mat = el.getObject3D('mesh');
         if (mat && mat.material) {
