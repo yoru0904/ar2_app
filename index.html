@@ -326,7 +326,7 @@
       });
     }
 
-    /* ---------- 「バイバイ」ボタン：光の粒子のように消える演出 ---------- */
+    /* ---------- 「バイバイ」ボタン：消滅演出 ---------- */
     async function byeAndExit() {
       if (reacting) return;
       reacting = true;
@@ -339,12 +339,10 @@
         function particleFrame(now) {
           const p = Math.min((now - start) / duration, 1);
           
-          // スケールが拡大しつつ上にふんわり浮き上がる
           const scaleVal = 1 + p * 1.5;
           poyoEl.object3D.scale.set(scaleVal, scaleVal, 1);
           poyoEl.object3D.position.set(0, p * 0.8, 0);
 
-          // キャラクター画像およびネームプレートの透明度を下げて消えるようにする
           [charNormal, charClosed, exclEl, charName].forEach(el => {
             const mat = el.getObject3D('mesh');
             if (mat && mat.material) {
@@ -356,7 +354,6 @@
           if (p < 1) {
             requestAnimationFrame(particleFrame);
           } else {
-            // 演出終了後にARを完全停止して最初の画面に戻す
             const arSystem = sceneEl.systems['mindar-image-system'];
             arSystem.stop();
             actionUi.style.display = 'none';
@@ -364,7 +361,6 @@
             statusBar.textContent = 'ARを終了しました';
             statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
             
-            // 次回開始のためにキャラクターの状態をリセット
             resetCharacter();
             reacting = false;
             resolve();
@@ -397,10 +393,10 @@
       statusBar.textContent = 'カメラ初期化中...';
       const arSystem = sceneEl.systems['mindar-image-system'];
       try {
-        resetCharacter(); // 開始時にも必ず綺麗にリセット
+        resetCharacter(); 
         await arSystem.start();
         overlay.style.display = 'none';
-        actionUi.style.display = 'flex'; // 操作用ボタンを表示
+        actionUi.style.display = 'flex'; 
         statusBar.textContent = 'マーカーを探索中...';
         
         activeBlink = true;
