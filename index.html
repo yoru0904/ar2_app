@@ -7,7 +7,7 @@
 
   <!-- A-Frame 1.4.2 & MindAR 1.2.5 -->
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mind-ar-image-aframe.prod.js"></script>
 
   <style>
     html, body {
@@ -32,12 +32,16 @@
       position: absolute !important;
       top: 0 !important;
       left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
       object-fit: cover !important;
+      z-index: 0;
     }
 
-    /* MindARのデフォルトUIを非表示にする */
-    .mindar-ui-loading, .mindar-ui-compatibility {
+    .mindar-ui-loading, .mindar-ui-compatibility, .mindar-ui-overlay {
       display: none !important;
+      opacity: 0 !important;
+      visibility: hidden !important;
     }
 
     #overlay {
@@ -106,7 +110,6 @@
       transition: background 0.3s ease;
     }
 
-    /* 画面下部の操作用UIボタン */
     #action-ui {
       position: fixed;
       bottom: 30px;
@@ -115,7 +118,7 @@
       display: flex;
       gap: 8px;
       z-index: 10000;
-      display: none; /* 初期状態は非表示 */
+      display: none;
     }
 
     .action-btn {
@@ -134,12 +137,11 @@
     .action-btn:active {
       transform: scale(0.95);
     }
-    #touch-btn { background: #ec4899; } /* ピンク：触る */
-    #name-btn  { background: #8b5cf6; } /* パープル：名前 */
-    #video-btn { background: #0284c7; } /* ブルー：動画を見る */
-    #bye-btn   { background: #ef4444; } /* レッド：バイバイ */
+    #touch-btn { background: #ec4899; }
+    #name-btn  { background: #8b5cf6; }
+    #video-btn { background: #0284c7; }
+    #bye-btn   { background: #ef4444; }
 
-    /* 動画再生モーダルウィンドウ */
     #video-modal {
       position: fixed;
       top: 0;
@@ -155,12 +157,14 @@
       gap: 20px;
     }
     #video-modal video {
-      width: 90%;
+      width: 90% !important;
+      height: auto !important;
       max-width: 400px;
       max-height: 60vh;
       border-radius: 12px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.5);
       object-fit: contain;
+      position: relative !important;
     }
     #close-video-btn {
       background: #ffffff;
@@ -179,7 +183,6 @@
 
   <div id="status-bar">カメラ起動準備完了</div>
 
-  <!-- 操作用UIボタン -->
   <div id="action-ui">
     <button id="touch-btn" class="action-btn">✨ 触る</button>
     <button id="name-btn" class="action-btn">✏ 名前</button>
@@ -187,9 +190,9 @@
     <button id="bye-btn" class="action-btn">👋 バイバイ</button>
   </div>
 
-  <!-- 動画再生モーダル -->
   <div id="video-modal">
-    <video id="popup-video" src="./image/sample.mp4" controls playsinline webkit-playsinline x5-playsinline preload="auto"></video>
+    <!-- リポジトリ内の test.mp4 に合わせて修正 -->
+    <video id="popup-video" src="./image/test.mp4" controls playsinline webkit-playsinline x5-playsinline preload="auto"></video>
     <button id="close-video-btn">閉じる</button>
   </div>
 
@@ -203,6 +206,7 @@
 
   <a-scene
     id="ar-scene"
+    embedded
     mindar-image="imageTargetSrc: ./mark.mind; autoStart: false;"
     color-space="sRGB"
     renderer="colorManagement: true, physicallyCorrectLights: true"
@@ -404,7 +408,7 @@
             requestAnimationFrame(particleFrame);
           } else {
             const arSystem = sceneEl.systems['mindar-image-system'];
-            arSystem.stop();
+            if (arSystem) arSystem.stop();
             actionUi.style.display = 'none';
             overlay.style.display = 'flex';
             statusBar.textContent = 'ARを終了しました';
@@ -439,6 +443,9 @@
       statusBar.textContent = 'カメラ初期化中...';
       const arSystem = sceneEl.systems['mindar-image-system'];
       try {
+        if (!arSystem) {
+          throw new Error('MindAR system not found');
+        }
         resetCharacter(); 
         await arSystem.start();
         overlay.style.display = 'none';
