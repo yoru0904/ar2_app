@@ -123,7 +123,7 @@
       border-radius: 9999px;
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      white-space: nowrap; /* スマホで勝手に改行されるのを防ぐ */
+      white-space: nowrap;
       transition: transform 0.1s;
     }
     .action-btn:active {
@@ -138,7 +138,7 @@
 
   <div id="status-bar">カメラ起動準備完了</div>
 
-  <!-- 操作用UIボタン（触る・名前をつける・バイバイ） -->
+  <!-- 操作用UIボタン -->
   <div id="action-ui">
     <button id="touch-btn" class="action-btn">✨ 触る</button>
     <button id="name-btn" class="action-btn">✏ 名前</button>
@@ -189,11 +189,11 @@
             src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- キャラクターの名前（初期は非表示） -->
+          <!-- キャラクターの名前プレート（初期は非表示 / 下側に配置） -->
           <a-text 
             id="char-name"
             value="" 
-            position="0 0.6 0.02" 
+            position="0 -0.6 0.02" 
             align="center" 
             color="#ffffff" 
             scale="0.8 0.8 0.8"
@@ -224,9 +224,8 @@
     const nameBtn    = document.querySelector('#name-btn');
     const byeBtn     = document.querySelector('#bye-btn');
 
-    /* ---------- 調整用の設定 ---------- */
-    const REACTION_MS = 1400;   // 「触る」リアクション時間
-    const POYO_MS     = 1000;   // ぽよっ動作の長さ
+    const REACTION_MS = 1400;  
+    const POYO_MS     = 1000;  
 
     const POYO_KEYS = [
       [0.00, 1.00, 1.00, 0.00],
@@ -235,10 +234,9 @@
       [0.70, 1.05, 0.96, 0.00],
       [1.00, 1.00, 1.00, 0.00]
     ];
-    /* ---------------------------------- */
 
-    let reacting = false;  // 割り込み防止ロック
-    let activeBlink = true; // 瞬きループ制御用
+    let reacting = false;  
+    let activeBlink = true; 
 
     const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
@@ -270,7 +268,6 @@
 
     const wait = ms => new Promise(r => setTimeout(r, ms));
 
-    // フレーム（画像状態）を切り替える関数
     function showFrame(type) {
       if (type === 'normal') {
         charNormal.setAttribute('visible', true);
@@ -281,7 +278,6 @@
       }
     }
 
-    // 「触る」ボタンを押したときのリアクション（ぽよっ＋目パチ）
     async function react() {
       if (reacting) return;
       reacting = true;
@@ -303,23 +299,22 @@
 
     touchBtn.addEventListener('click', react);
 
-    // 「名前」ボタンを押したときの処理（未入力状態から自分でつける）
+    // 「名前」ボタンを押したときの処理（キャラクターの下側に名前プレートを表示）
     nameBtn.addEventListener('click', () => {
       const currentName = charName.getAttribute('value');
-      const newName = prompt('キャラクターに名前をつけてあげてください:', currentName);
+      const newName = prompt('キャラクターの名前を入力してください:', currentName);
       if (newName !== null && newName.trim() !== '') {
         charName.setAttribute('value', newName.trim());
         charName.setAttribute('visible', true); // 名前がついたら表示する
       }
     });
 
-    // キャラクターの見た目を完全に初期化する関数
     function resetCharacter() {
       poyoEl.object3D.scale.set(1, 1, 1);
       poyoEl.object3D.position.set(0, 0, 0);
       showFrame('normal');
       charName.setAttribute('value', '');
-      charName.setAttribute('visible', false); // リセット時は名前も非表示に
+      charName.setAttribute('visible', false);
 
       [charNormal, charClosed, charName].forEach(el => {
         const mat = el.getObject3D('mesh');
@@ -330,14 +325,13 @@
       });
     }
 
-    /* ---------- 「バイバイ」ボタン：消滅演出 ---------- */
     async function byeAndExit() {
       if (reacting) return;
       reacting = true;
-      activeBlink = false; // 瞬きを停止
+      activeBlink = false; 
 
       const start = performance.now();
-      const duration = 1200; // 1.2秒かけて消滅
+      const duration = 1200; 
 
       return new Promise(resolve => {
         function particleFrame(now) {
@@ -376,7 +370,6 @@
 
     byeBtn.addEventListener('click', byeAndExit);
 
-    /* ---------- 自動瞬き（常時ループ） ---------- */
     async function startBlinking() {
       while (activeBlink) {
         const randomWait = Math.random() * 2000 + 2000; 
@@ -392,7 +385,6 @@
       }
     }
 
-    /* ---------- AR起動 ---------- */
     startBtn.addEventListener('click', async () => {
       statusBar.textContent = 'カメラ初期化中...';
       const arSystem = sceneEl.systems['mindar-image-system'];
