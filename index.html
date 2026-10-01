@@ -17,7 +17,7 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
     }
 
     a-scene {
@@ -101,15 +101,16 @@
       transition: background 0.3s ease;
     }
 
+    /* 画面下部の操作用UIボタン */
     #action-ui {
       position: fixed;
       bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 12px;
+      gap: 10px;
       z-index: 10000;
-      display: none;
+      display: none; /* 初期状態は非表示（AR開始後に表示） */
     }
 
     .action-btn {
@@ -118,33 +119,36 @@
       color: white;
       font-size: 14px;
       font-weight: bold;
-      padding: 12px 24px;
+      padding: 12px 18px;
       border-radius: 9999px;
       cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       transition: transform 0.1s;
     }
     .action-btn:active {
       transform: scale(0.95);
     }
-    #touch-btn { background: #ec4899; }
-    #bye-btn   { background: #ef4444; }
+    #touch-btn { background: #ec4899; } /* ピンク：触る */
+    #name-btn  { background: #8b5cf6; } /* パープル：名前 */
+    #bye-btn   { background: #ef4444; } /* レッド：バイバイ */
   </style>
 </head>
 <body>
 
   <div id="status-bar">カメラ起動準備完了</div>
 
+  <!-- 操作用UIボタン -->
   <div id="action-ui">
     <button id="touch-btn" class="action-btn">✨ 触る</button>
+    <button id="name-btn" class="action-btn">✏ 名前</button>
     <button id="bye-btn" class="action-btn">👋 バイバイ</button>
   </div>
 
   <div id="overlay">
     <div class="start-card">
       <h2>WebAR デモ</h2>
-      <p>ボタンを押してカメラを許可し、マーカーにかざしてください。</p>
+      <p>ボタンを押してカメラを許可し、マーカーにかざしてください。自動で瞬きします。</p>
       <button id="start-btn">ARを開始する</button>
     </div>
   </div>
@@ -160,20 +164,41 @@
     <a-assets>
       <img id="tex-normal" src="./image/test.png" crossorigin="anonymous">
       <img id="tex-closed" src="./image/test2.png" crossorigin="anonymous">
+      <img id="tex-excl"   src="./image/test3.png" crossorigin="anonymous">
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
     <a-entity id="target" mindar-image-target="targetIndex: 0">
-      <a-entity id="poyo" position="0 0 0" scale="1 1 1">
-        <a-plane id="char-normal"
-          src="#tex-normal" position="0 0 0" width="1" height="1"
-          material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-        <a-plane id="char-closed"
-          src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
-          material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
+      <!-- 浮遊アニメーション担当 -->
+      <a-entity
+        id="floater"
+        position="0 0 0.5"
+        animation="property: position; from: 0 0 0.5; to: 0 0 2; dir: alternate; dur: 3000; easing: easeInOutQuad; loop: true">
+
+        <!-- ぽよっ・消滅アニメーション担当 -->
+        <!-- ※ネームプレートとキラキラは JS が THREE オブジェクトとしてここに追加します -->
+        <a-entity id="poyo" position="0 0 0" scale="1 1 1">
+
+          <!-- 通常 -->
+          <a-plane id="char-normal"
+            src="#tex-normal" position="0 0 0" width="1" height="1"
+            material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
+
+          <!-- 目を閉じた差分（初期は非表示） -->
+          <a-plane id="char-closed"
+            src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
+            material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
+
+          <!-- 「！」（test3.png。初期は非表示） -->
+          <a-plane id="excl"
+            src="#tex-excl" position="0 0 0.01" width="1" height="1" visible="false"
+            material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
+
+        </a-entity>
       </a-entity>
+
     </a-entity>
   </a-scene>
 
@@ -188,69 +213,405 @@
     const poyoEl     = document.querySelector('#poyo');
     const charNormal = document.querySelector('#char-normal');
     const charClosed = document.querySelector('#char-closed');
+    const exclEl     = document.querySelector('#excl');
 
     const touchBtn   = document.querySelector('#touch-btn');
+    const nameBtn    = document.querySelector('#name-btn');
     const byeBtn     = document.querySelector('#bye-btn');
 
-    let isBusy = false;
+    const THREE = AFRAME.THREE;
 
+    /* ---------- 調整用の設定 ---------- */
+    const REACTION_MS = 1400;   // 「！」リアクション時間
+    const POYO_MS     = 1000;   // ぽよっ動作の長さ
+    const NAME_MAX    = 12;     // 名前の最大文字数
+    const SPARKLE_N   = 18;     // キラキラの数（増やしすぎ注意）
+    const SPARKLE_MS  = 2400;   // キラキラ演出の全体時間
+
+    const POYO_KEYS = [
+      [0.00, 1.00, 1.00, 0.00],
+      [0.20, 1.14, 0.84, 0.00],
+      [0.45, 0.92, 1.12, 0.07],
+      [0.70, 1.05, 0.96, 0.00],
+      [1.00, 1.00, 1.00, 0.00]
+    ];
+    /* ---------------------------------- */
+
+    let reacting = false;   // 割り込み防止ロック
+    let activeBlink = true; // 瞬きループ制御用
+    let blinkToken = 0;     // 瞬きループの二重起動防止
+
+    const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    /* ---------- ネームプレート（canvasテクスチャ：日本語もOK） ---------- */
+    let nameMesh = null;
+    let nameCanvas = null;
+    let nameTex = null;
+
+    function setSRGB(tex) {
+      if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+      else if ('colorSpace' in tex && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    }
+
+    function ensureNamePlate() {
+      if (nameMesh) return;
+      nameCanvas = document.createElement('canvas');
+      nameCanvas.width = 512;
+      nameCanvas.height = 128;
+      nameTex = new THREE.CanvasTexture(nameCanvas);
+      setSRGB(nameTex);
+      const mat = new THREE.MeshBasicMaterial({
+        map: nameTex,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        toneMapped: false
+      });
+      nameMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), mat);
+      nameMesh.position.set(0, 0.65, 0.02);
+      nameMesh.visible = false; // 初期状態は非表示
+      poyoEl.object3D.add(nameMesh);
+    }
+
+    function drawNamePlate(name) {
+      const ctx = nameCanvas.getContext('2d');
+      const w = nameCanvas.width, h = nameCanvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // 角丸の半透明背景
+      const r = 40;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+      ctx.beginPath();
+      ctx.moveTo(r, 8);
+      ctx.lineTo(w - r, 8);
+      ctx.quadraticCurveTo(w - 8, 8, w - 8, r);
+      ctx.lineTo(w - 8, h - r);
+      ctx.quadraticCurveTo(w - 8, h - 8, w - r, h - 8);
+      ctx.lineTo(r, h - 8);
+      ctx.quadraticCurveTo(8, h - 8, 8, h - r);
+      ctx.lineTo(8, r);
+      ctx.quadraticCurveTo(8, 8, r, 8);
+      ctx.closePath();
+      ctx.fill();
+
+      // 文字（長い名前は自動で縮小）
+      let size = 64;
+      const font = s => `bold ${s}px -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif`;
+      ctx.font = font(size);
+      while (ctx.measureText(name).width > w - 60 && size > 20) {
+        size -= 2;
+        ctx.font = font(size);
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, w / 2, h / 2 + 3);
+
+      nameTex.needsUpdate = true;
+    }
+
+    function setCharacterName(name) {
+      ensureNamePlate();
+      if (!name) {
+        nameMesh.visible = false;
+        return;
+      }
+      drawNamePlate(name);
+      nameMesh.material.opacity = 1;
+      nameMesh.visible = true;
+    }
+
+    /* ---------- キラキラエフェクト（Sprite少数 + 1本のrAF） ---------- */
+    let sparkleGroup = null;
+    let sparkleTex = null;
+    const sparkles = [];
+    let sparkleToken = 0;
+
+    function makeSparkleTexture() {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.25, 'rgba(255,240,170,0.85)');
+      g.addColorStop(1, 'rgba(255,220,120,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 64);
+      // 十字の光芒
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.beginPath();
+      ctx.moveTo(32, 2);  ctx.lineTo(36, 28); ctx.lineTo(62, 32);
+      ctx.lineTo(36, 36); ctx.lineTo(32, 62); ctx.lineTo(28, 36);
+      ctx.lineTo(2, 32);  ctx.lineTo(28, 28);
+      ctx.closePath();
+      ctx.fill();
+      const tex = new THREE.CanvasTexture(c);
+      setSRGB(tex);
+      return tex;
+    }
+
+    function ensureSparkles() {
+      if (sparkleGroup) return;
+      sparkleTex = makeSparkleTexture();
+      sparkleGroup = new THREE.Group();
+      sparkleGroup.visible = false;
+      for (let i = 0; i < SPARKLE_N; i++) {
+        const mat = new THREE.SpriteMaterial({
+          map: sparkleTex,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false
+        });
+        const sp = new THREE.Sprite(mat);
+        sp.visible = false;
+        sparkleGroup.add(sp);
+        sparkles.push({ sp, ang: 0, r0: 0, r1: 0, z: 0, delay: 0, life: 1, size: 0.1, spin: 0 });
+      }
+      poyoEl.object3D.add(sparkleGroup);
+    }
+
+    function hideSparkles() {
+      sparkleToken++; // 進行中のループを無効化
+      if (!sparkleGroup) return;
+      sparkleGroup.visible = false;
+      sparkles.forEach(s => { s.sp.visible = false; s.sp.material.opacity = 0; });
+    }
+
+    function playSparkles() {
+      ensureSparkles();
+      const token = ++sparkleToken; // 再実行時は前回ループを置き換える
+      const TWO_PI = Math.PI * 2;
+
+      sparkles.forEach((s, i) => {
+        s.ang   = (i / SPARKLE_N) * TWO_PI + Math.random() * 0.6;
+        s.r0    = 0.30 + Math.random() * 0.25;
+        s.r1    = s.r0 + 0.25 + Math.random() * 0.3;
+        s.z     = 0.03 + Math.random() * 0.12;
+        s.delay = Math.random() * 700;
+        s.life  = 900 + Math.random() * 700;
+        s.size  = 0.10 + Math.random() * 0.12;
+        s.spin  = (Math.random() - 0.5) * 4;
+      });
+      sparkleGroup.visible = true;
+
+      const start = performance.now();
+      function frame(now) {
+        if (token !== sparkleToken) return; // 新しい演出 or 終了処理に置き換わった
+        const t = now - start;
+        for (let i = 0; i < sparkles.length; i++) {
+          const s = sparkles[i];
+          const lt = (t - s.delay) / s.life;
+          if (lt < 0 || lt > 1) {
+            s.sp.visible = false;
+            continue;
+          }
+          const env = Math.sin(Math.PI * lt); // 0→1→0
+          const rad = s.r0 + (s.r1 - s.r0) * lt;
+          s.sp.visible = true;
+          s.sp.position.set(
+            Math.cos(s.ang) * rad,
+            Math.sin(s.ang) * rad + lt * 0.25,
+            s.z
+          );
+          const twinkle = 0.65 + 0.35 * Math.sin(t * 0.02 + i * 1.7);
+          s.sp.material.opacity = env * twinkle;
+          s.sp.material.rotation = s.spin * lt;
+          const sc = s.size * (0.5 + 0.9 * env);
+          s.sp.scale.set(sc, sc, 1);
+        }
+        if (t < SPARKLE_MS) {
+          requestAnimationFrame(frame);
+        } else {
+          hideSparkles();
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    /* ---------- ぽよっアニメーション ---------- */
+    function playPoyo(duration) {
+      return new Promise(resolve => {
+        const start = performance.now();
+        function frame(now) {
+          const p = Math.min((now - start) / duration, 1);
+          let i = 0;
+          while (i < POYO_KEYS.length - 2 && p > POYO_KEYS[i + 1][0]) i++;
+          const a = POYO_KEYS[i], b = POYO_KEYS[i + 1];
+          const local = easeInOut((p - a[0]) / (b[0] - a[0]));
+          const sx = a[1] + (b[1] - a[1]) * local;
+          const sy = a[2] + (b[2] - a[2]) * local;
+          const py = a[3] + (b[3] - a[3]) * local;
+          poyoEl.object3D.scale.set(sx, sy, 1);
+          poyoEl.object3D.position.set(0, py, 0);
+          if (p < 1) {
+            requestAnimationFrame(frame);
+          } else {
+            poyoEl.object3D.scale.set(1, 1, 1);
+            poyoEl.object3D.position.set(0, 0, 0);
+            resolve();
+          }
+        }
+        requestAnimationFrame(frame);
+      });
+    }
+
+    // フレーム（画像状態）を切り替える関数
     function showFrame(type) {
       if (type === 'normal') {
         charNormal.setAttribute('visible', true);
         charClosed.setAttribute('visible', false);
-      } else {
+        exclEl.setAttribute('visible', false);
+      } else if (type === 'closed') {
         charNormal.setAttribute('visible', false);
         charClosed.setAttribute('visible', true);
+        exclEl.setAttribute('visible', false);
+      } else if (type === 'excl') {
+        charNormal.setAttribute('visible', false);
+        charClosed.setAttribute('visible', true);
+        exclEl.setAttribute('visible', true); // test3.png (!) を表示
       }
     }
 
-    // 「触る」ボタンのリアクション
-    touchBtn.addEventListener('click', () => {
-      if (isBusy) return;
-      isBusy = true;
-
-      showFrame('closed');
-      setTimeout(() => showFrame('normal'), 200);
-      setTimeout(() => showFrame('closed'), 400);
-      setTimeout(() => {
+    // 「触る」ボタンを押したときのリアクション（！）
+    async function react() {
+      if (reacting) return;
+      reacting = true;
+      try {
         showFrame('normal');
-        isBusy = false;
-      }, 600);
+        await wait(150);
+        showFrame('closed');
+        await wait(150);
+        showFrame('excl'); // 「！」マークを表示
+
+        await Promise.all([playPoyo(POYO_MS), wait(REACTION_MS)]);
+      } finally {
+        showFrame('normal');
+        poyoEl.object3D.scale.set(1, 1, 1);
+        poyoEl.object3D.position.set(0, 0, 0);
+        reacting = false;
+      }
+    }
+
+    touchBtn.addEventListener('click', react);
+
+    /* ---------- 「✏ 名前」ボタン ---------- */
+    nameBtn.addEventListener('click', () => {
+      const current = nameMesh && nameMesh.visible ? (nameMesh.userData.name || '') : '';
+      const input = window.prompt('キャラクターの名前を入力してください', current);
+      if (input === null) return; // キャンセル
+      const name = input.trim().slice(0, NAME_MAX);
+      ensureNamePlate();
+      nameMesh.userData.name = name;
+      setCharacterName(name);
+      if (name) {
+        playSparkles();
+        statusBar.textContent = '✨ 「' + name + '」と名付けました！';
+      } else {
+        hideSparkles();
+        statusBar.textContent = '名前を消しました';
+      }
     });
 
-    // 「バイバイ」ボタン：ARを安全に停止して最初の画面に戻る
-    byeBtn.addEventListener('click', () => {
-      if (isBusy) return;
-      isBusy = true;
-
-      try {
-        const arSystem = sceneEl.systems['mindar-image-system'];
-        arSystem.stop();
-      } catch (e) {
-        console.error(e);
-      }
-
-      actionUi.style.display = 'none';
-      overlay.style.display = 'flex';
-      statusBar.textContent = 'カメラ起動準備完了';
-      statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
-
-      // 状態を初期化
-      showFrame('normal');
+    /* ---------- キャラクター状態のリセット（再開始用） ---------- */
+    function resetCharacter() {
       poyoEl.object3D.scale.set(1, 1, 1);
       poyoEl.object3D.position.set(0, 0, 0);
-      isBusy = false;
-    });
+      [charNormal, charClosed, exclEl].forEach(el => {
+        const mesh = el.getObject3D('mesh');
+        if (mesh) mesh.material.opacity = 1;
+      });
+      if (nameMesh) nameMesh.material.opacity = 1;
+      hideSparkles();
+      showFrame('normal');
+      reacting = false;
+    }
 
-    // スタートボタン
+    /* ---------- 「バイバイ」ボタン：光の粒子のように消える演出 ---------- */
+    async function byeAndExit() {
+      if (reacting) return;
+      reacting = true;
+      activeBlink = false; // 瞬きを停止
+      hideSparkles();
+
+      const start = performance.now();
+      const duration = 1200; // 1.2秒かけて消滅
+
+      return new Promise(resolve => {
+        function particleFrame(now) {
+          const p = Math.min((now - start) / duration, 1);
+
+          // スケールが拡大しつつ上にふんわり浮き上がる
+          const scaleVal = 1 + p * 1.5;
+          poyoEl.object3D.scale.set(scaleVal, scaleVal, 1);
+          poyoEl.object3D.position.set(0, p * 0.8, 0);
+
+          // キャラクター画像およびネームプレートの透明度を下げて消えるようにする
+          [charNormal, charClosed, exclEl].forEach(el => {
+            if (el) {
+              const mat = el.getObject3D('mesh');
+              if (mat) {
+                mat.material.transparent = true;
+                mat.material.opacity = 1 - p;
+              }
+            }
+          });
+          if (nameMesh) nameMesh.material.opacity = 1 - p;
+
+          if (p < 1) {
+            requestAnimationFrame(particleFrame);
+          } else {
+            // 演出終了後にARを完全停止して最初の画面に戻す
+            const arSystem = sceneEl.systems['mindar-image-system'];
+            arSystem.stop();
+            actionUi.style.display = 'none';
+            overlay.style.display = 'flex';
+            statusBar.textContent = 'ARを終了しました';
+            statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
+            resolve();
+          }
+        }
+        requestAnimationFrame(particleFrame);
+      });
+    }
+
+    byeBtn.addEventListener('click', byeAndExit);
+
+    /* ---------- 自動瞬き（常時ループ） ---------- */
+    async function startBlinking() {
+      const myToken = ++blinkToken; // 古いループは自動的に終了する
+      while (activeBlink && myToken === blinkToken) {
+        const randomWait = Math.random() * 2000 + 2000;
+        await wait(randomWait);
+
+        if (!reacting && activeBlink && myToken === blinkToken) {
+          reacting = true;
+          showFrame('closed');
+          await wait(150);
+          showFrame('normal');
+          reacting = false;
+        }
+      }
+    }
+
+    /* ---------- AR起動 ---------- */
     startBtn.addEventListener('click', async () => {
       statusBar.textContent = 'カメラ初期化中...';
       const arSystem = sceneEl.systems['mindar-image-system'];
       try {
+        ensureNamePlate();
+        ensureSparkles();
+        resetCharacter(); // バイバイ後の再開始でも元の状態に戻す
+
         await arSystem.start();
         overlay.style.display = 'none';
-        actionUi.style.display = 'flex';
+        actionUi.style.display = 'flex'; // 操作用ボタンを表示
         statusBar.textContent = 'マーカーを探索中...';
+
+        activeBlink = true;
+        startBlinking();
       } catch (err) {
         console.error(err);
         statusBar.textContent = '起動エラー: ' + err.message;
@@ -258,7 +619,7 @@
     });
 
     targetEl.addEventListener('targetFound', () => {
-      statusBar.textContent = '★ マーカー認識中！';
+      statusBar.textContent = '★ マーカー認識中！ ボタンを押してね';
       statusBar.style.background = 'rgba(22, 163, 74, 0.85)';
     });
 
