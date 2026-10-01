@@ -615,3 +615,101 @@
   </script>
 </body>
 </html>
+
+      if (reacting) return;
+      reacting = true;
+      activeBlink = false; // 瞬きを停止
+      hideSparkles();
+
+      const start = performance.now();
+      const duration = 1200; // 1.2秒かけて消滅
+
+      return new Promise(resolve => {
+        function particleFrame(now) {
+          const p = Math.min((now - start) / duration, 1);
+
+          // スケールが拡大しつつ上にふんわり浮き上がる
+          const scaleVal = 1 + p * 1.5;
+          poyoEl.object3D.scale.set(scaleVal, scaleVal, 1);
+          poyoEl.object3D.position.set(0, p * 0.8, 0);
+
+          // キャラクター画像およびネームプレートの透明度を下げて消えるようにする
+          [charNormal, charClosed].forEach(el => {
+            const mat = el.getObject3D('mesh');
+            if (mat) {
+              mat.material.transparent = true;
+              mat.material.opacity = 1 - p;
+            }
+          });
+          if (nameMesh) nameMesh.material.opacity = 1 - p;
+
+          if (p < 1) {
+            requestAnimationFrame(particleFrame);
+          } else {
+            // 演出終了後にARを完全停止して最初の画面に戻す
+            const arSystem = sceneEl.systems['mindar-image-system'];
+            arSystem.stop();
+            actionUi.style.display = 'none';
+            overlay.style.display = 'flex';
+            statusBar.textContent = 'ARを終了しました';
+            statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
+            resolve();
+          }
+        }
+        requestAnimationFrame(particleFrame);
+      });
+    }
+
+    byeBtn.addEventListener('click', byeAndExit);
+
+    /* ---------- 自動瞬き（常時ループ） ---------- */
+    async function startBlinking() {
+      const myToken = ++blinkToken; // 古いループは自動的に終了する
+      while (activeBlink && myToken === blinkToken) {
+        const randomWait = Math.random() * 2000 + 2000;
+        await wait(randomWait);
+
+        if (!reacting && activeBlink && myToken === blinkToken) {
+          reacting = true;
+          showFrame('closed');
+          await wait(150);
+          showFrame('normal');
+          reacting = false;
+        }
+      }
+    }
+
+    /* ---------- AR起動 ---------- */
+    startBtn.addEventListener('click', async () => {
+      statusBar.textContent = 'カメラ初期化中...';
+      const arSystem = sceneEl.systems['mindar-image-system'];
+      try {
+        ensureNamePlate();
+        ensureSparkles();
+        resetCharacter(); // バイバイ後の再開始でも元の状態に戻す
+
+        await arSystem.start();
+        overlay.style.display = 'none';
+        actionUi.style.display = 'flex'; // 操作用ボタンを表示
+        statusBar.textContent = 'マーカーを探索中...';
+
+        activeBlink = true;
+        startBlinking();
+      } catch (err) {
+        console.error(err);
+        statusBar.textContent = '起動エラー: ' + err.message;
+      }
+    });
+
+    targetEl.addEventListener('targetFound', () => {
+      statusBar.textContent = '★ マーカー認識中！ ボタンを押してね';
+      statusBar.style.background = 'rgba(22, 163, 74, 0.85)';
+    });
+
+    targetEl.addEventListener('targetLost', () => {
+      statusBar.textContent = 'マーカーを見失いました';
+      statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
+    });
+  </script>
+</body>
+</html>
