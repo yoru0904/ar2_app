@@ -101,7 +101,6 @@
       transition: background 0.3s ease;
     }
 
-    /* 画面下部の操作用UIボタン（3つ並び） */
     #action-ui {
       position: fixed;
       bottom: 30px;
@@ -110,7 +109,7 @@
       display: flex;
       gap: 10px;
       z-index: 10000;
-      display: none; /* 初期状態は非表示 */
+      display: none;
     }
 
     .action-btn {
@@ -129,16 +128,15 @@
     .action-btn:active {
       transform: scale(0.95);
     }
-    #touch-btn { background: #ec4899; } /* ピンク：触る */
-    #name-btn  { background: #8b5cf6; } /* パープル：名前をつける */
-    #bye-btn   { background: #ef4444; } /* レッド：バイバイ */
+    #touch-btn { background: #ec4899; }
+    #name-btn  { background: #8b5cf6; }
+    #bye-btn   { background: #ef4444; }
   </style>
 </head>
 <body>
 
   <div id="status-bar">カメラ起動準備完了</div>
 
-  <!-- 操作用UIボタン -->
   <div id="action-ui">
     <button id="touch-btn" class="action-btn">✨ 触る</button>
     <button id="name-btn" class="action-btn">✏ 名前</button>
@@ -148,7 +146,7 @@
   <div id="overlay">
     <div class="start-card">
       <h2>WebAR デモ</h2>
-      <p>ボタンを押してカメラを許可し、マーカーにかざしてください。自動で瞬きします。</p>
+      <p>ボタンを押してカメラを許可し、マーカーにかざしてください。</p>
       <button id="start-btn">ARを開始する</button>
     </div>
   </div>
@@ -170,38 +168,36 @@
 
     <a-entity id="target" mindar-image-target="targetIndex: 0">
 
-      <!-- 浮遊アニメーション担当 -->
       <a-entity
         id="floater"
         position="0 0 0.5"
         animation="property: position; from: 0 0 0.5; to: 0 0 2; dir: alternate; dur: 3000; easing: easeInOutQuad; loop: true">
 
-        <!-- ぽよっ・消滅アニメーション担当 -->
+        <!-- キャラクター本体（ぽよっアニメーション） -->
         <a-entity id="poyo" position="0 0 0" scale="1 1 1">
 
-          <!-- 通常 -->
           <a-plane id="char-normal"
             src="#tex-normal" position="0 0 0" width="1" height="1"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- 目を閉じた差分（初期は非表示） -->
           <a-plane id="char-closed"
             src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- キャラクターの名前プレート（初期は非表示 / 下側に配置） -->
-          <a-text 
-            id="char-name"
-            value="" 
-            position="0 -0.6 0.02" 
-            align="center" 
-            color="#ffffff" 
-            scale="0.8 0.8 0.8"
-            visible="false"
-            side="double">
-          </a-text>
-
         </a-entity>
+
+        <!-- 名前プレート（ぽよぽよで歪まないよう、親を分けてキャラクターの「真下」に固定） -->
+        <a-text 
+          id="char-name"
+          value="" 
+          position="0 -0.65 0" 
+          align="center" 
+          color="#ffffff" 
+          scale="0.8 0.8 0.8"
+          visible="false"
+          side="double">
+        </a-text>
+
       </a-entity>
 
     </a-entity>
@@ -299,13 +295,12 @@
 
     touchBtn.addEventListener('click', react);
 
-    // 「名前」ボタンを押したときの処理（キャラクターの下側に名前プレートを表示）
     nameBtn.addEventListener('click', () => {
       const currentName = charName.getAttribute('value');
       const newName = prompt('キャラクターの名前を入力してください:', currentName);
       if (newName !== null && newName.trim() !== '') {
         charName.setAttribute('value', newName.trim());
-        charName.setAttribute('visible', true); // 名前がついたら表示する
+        charName.setAttribute('visible', true);
       }
     });
 
@@ -316,13 +311,19 @@
       charName.setAttribute('value', '');
       charName.setAttribute('visible', false);
 
-      [charNormal, charClosed, charName].forEach(el => {
+      [charNormal, charClosed].forEach(el => {
         const mat = el.getObject3D('mesh');
         if (mat && mat.material) {
           mat.material.transparent = true;
           mat.material.opacity = 1.0;
         }
       });
+      // 名前プレートの透明度もリセット
+      const nameMat = charName.getObject3D('mesh');
+      if (nameMat && nameMat.material) {
+        nameMat.material.transparent = true;
+        nameMat.material.opacity = 1.0;
+      }
     }
 
     async function byeAndExit() {
@@ -341,13 +342,19 @@
           poyoEl.object3D.scale.set(scaleVal, scaleVal, 1);
           poyoEl.object3D.position.set(0, p * 0.8, 0);
 
-          [charNormal, charClosed, charName].forEach(el => {
+          [charNormal, charClosed].forEach(el => {
             const mat = el.getObject3D('mesh');
             if (mat && mat.material) {
               mat.material.transparent = true;
               mat.material.opacity = 1 - p;
             }
           });
+
+          const nameMat = charName.getObject3D('mesh');
+          if (nameMat && nameMat.material) {
+            nameMat.material.transparent = true;
+            nameMat.material.opacity = 1 - p;
+          }
 
           if (p < 1) {
             requestAnimationFrame(particleFrame);
@@ -409,7 +416,7 @@
     });
 
     targetEl.addEventListener('targetLost', () => {
-      statusBar.textContent = 'マーカーを見失いました';
+      statusBar.textContent, statusBar.textContent = 'マーカーを見失いました';
       statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
     });
   </script>
