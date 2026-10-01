@@ -9,35 +9,6 @@
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  <!-- 共有状態 + GLB用の軽量アニメーション再生コンポーネント（A-Frameの初期化前に登録） -->
-  <script>
-    window.arState = { targetVisible: false, modelShown: false, videoOpen: false };
-
-    AFRAME.registerComponent('idle-anim', {
-      init: function () {
-        this.mixer = null;
-        this.el.addEventListener('model-loaded', (e) => {
-          try {
-            const model = e.detail && e.detail.model;
-            if (model && model.animations && model.animations.length) {
-              this.mixer = new AFRAME.THREE.AnimationMixer(model);
-              this.mixer.clipAction(model.animations[0]).play();
-            }
-          } catch (err) {
-            console.warn('GLB animation init failed:', err);
-          }
-        });
-      },
-      tick: function (time, dt) {
-        const s = window.arState;
-        // マーカー認識中・3D表示中・動画非表示のときだけ更新（無駄な負荷を避ける）
-        if (this.mixer && s.targetVisible && s.modelShown && !s.videoOpen) {
-          this.mixer.update(Math.min(dt, 100) / 1000);
-        }
-      }
-    });
-  </script>
-
   <style>
     html, body {
       position: relative;
@@ -57,8 +28,7 @@
       left: 0 !important;
     }
 
-    /* MindARのカメラ映像用（動画テクスチャ用の #ar-movie は対象外） */
-    video:not(#ar-movie) {
+    video {
       position: absolute !important;
       top: 0 !important;
       left: 0 !important;
@@ -128,79 +98,50 @@
       z-index: 10000;
       pointer-events: none;
       white-space: nowrap;
-      max-width: 92vw;
-      overflow: hidden;
-      text-overflow: ellipsis;
       transition: background 0.3s ease;
     }
 
     /* 画面下部の操作用UIボタン */
     #action-ui {
       position: fixed;
-      bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+      bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
-      display: none; /* 初期状態は非表示（AR開始後に flex で表示） */
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 10px;
-      width: 94vw;
-      max-width: 460px;
-      z-index: 10000;
-    }
-
-    /* 動画再生中だけ出る補助ボタン */
-    #video-ui {
-      position: fixed;
-      bottom: calc(150px + env(safe-area-inset-bottom, 0px));
-      left: 50%;
-      transform: translateX(-50%);
-      display: none;
+      display: flex;
       gap: 10px;
       z-index: 10000;
+      display: none; /* 初期状態は非表示（AR開始後に表示） */
     }
 
     .action-btn {
       appearance: none;
       border: none;
       color: white;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: bold;
-      padding: 11px 15px;
+      padding: 12px 18px;
       border-radius: 9999px;
       cursor: pointer;
       white-space: nowrap;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       transition: transform 0.1s;
-      -webkit-tap-highlight-color: transparent;
     }
     .action-btn:active {
       transform: scale(0.95);
     }
     #touch-btn { background: #ec4899; } /* ピンク：触る */
     #name-btn  { background: #8b5cf6; } /* パープル：名前 */
-    #video-btn { background: #0ea5e9; } /* ブルー：動画 */
-    #mode-btn  { background: #14b8a6; } /* ティール：3D/2D切替 */
     #bye-btn   { background: #ef4444; } /* レッド：バイバイ */
-    #pause-btn, #mute-btn { background: #475569; }
   </style>
 </head>
 <body>
 
   <div id="status-bar">カメラ起動準備完了</div>
 
-  <!-- 動画の補助操作 -->
-  <div id="video-ui">
-    <button id="pause-btn" class="action-btn">⏸ 一時停止</button>
-    <button id="mute-btn" class="action-btn">🔊 音あり</button>
-  </div>
-
   <!-- 操作用UIボタン -->
   <div id="action-ui">
     <button id="touch-btn" class="action-btn">✨ 触る</button>
     <button id="name-btn" class="action-btn">✏ 名前</button>
-    <button id="video-btn" class="action-btn">🎬 動画を見る</button>
-    <button id="mode-btn" class="action-btn">🔄 2Dに切替</button>
     <button id="bye-btn" class="action-btn">👋 バイバイ</button>
   </div>
 
@@ -229,7 +170,7 @@
 
     <a-entity id="target" mindar-image-target="targetIndex: 0">
 
-      <!-- 浮遊アニメーション担当（動画表示中は丸ごと非表示にする） -->
+      <!-- 浮遊アニメーション担当 -->
       <a-entity
         id="floater"
         position="0 0 0.5"
@@ -239,23 +180,15 @@
         <!-- ※ネームプレートとキラキラは JS が THREE オブジェクトとしてここに追加します -->
         <a-entity id="poyo" position="0 0 0" scale="1 1 1">
 
-          <!-- 2D表示（画像plane） -->
-          <a-entity id="group2d">
-            <!-- 通常 -->
-            <a-plane id="char-normal"
-              src="#tex-normal" position="0 0 0" width="1" height="1"
-              material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
+          <!-- 通常 -->
+          <a-plane id="char-normal"
+            src="#tex-normal" position="0 0 0" width="1" height="1"
+            material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-            <!-- 目を閉じた差分（初期は非表示） -->
-            <a-plane id="char-closed"
-              src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
-              material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
-          </a-entity>
-
-          <!-- 3D表示（GLBモデル。読込完了まで非表示） -->
-          <a-entity id="group3d" visible="false">
-            <a-entity id="model" gltf-model="./avatr500.glb" idle-anim></a-entity>
-          </a-entity>
+          <!-- 目を閉じた差分（初期は非表示） -->
+          <a-plane id="char-closed"
+            src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
+            material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
         </a-entity>
       </a-entity>
@@ -270,23 +203,14 @@
     const statusBar  = document.querySelector('#status-bar');
     const targetEl   = document.querySelector('#target');
     const actionUi   = document.querySelector('#action-ui');
-    const videoUi    = document.querySelector('#video-ui');
 
-    const floaterEl  = document.querySelector('#floater');
     const poyoEl     = document.querySelector('#poyo');
-    const group2dEl  = document.querySelector('#group2d');
-    const group3dEl  = document.querySelector('#group3d');
-    const modelEl    = document.querySelector('#model');
     const charNormal = document.querySelector('#char-normal');
     const charClosed = document.querySelector('#char-closed');
 
     const touchBtn   = document.querySelector('#touch-btn');
     const nameBtn    = document.querySelector('#name-btn');
-    const videoBtn   = document.querySelector('#video-btn');
-    const modeBtn    = document.querySelector('#mode-btn');
     const byeBtn     = document.querySelector('#bye-btn');
-    const pauseBtn   = document.querySelector('#pause-btn');
-    const muteBtn    = document.querySelector('#mute-btn');
 
     const THREE = AFRAME.THREE;
 
@@ -295,9 +219,6 @@
     const NAME_MAX    = 12;     // 名前の最大文字数
     const SPARKLE_N   = 18;     // キラキラの数（増やしすぎ注意）
     const SPARKLE_MS  = 2400;   // キラキラ演出の全体時間
-    const MODEL_SIZE  = 1.0;    // GLBモデルの最大寸法（マーカー幅=1）
-    const VIDEO_SRC   = './test.mp4';
-    const VIDEO_WIDTH = 1.0;    // AR上の動画の幅（マーカー幅=1）
 
     const POYO_KEYS = [
       [0.00, 1.00, 1.00, 0.00],
@@ -309,114 +230,22 @@
     /* ---------------------------------- */
 
     let reacting = false;   // 割り込み防止ロック
-    let leaving = false;    // バイバイ演出中フラグ
     let activeBlink = true; // 瞬きループ制御用
     let blinkToken = 0;     // 瞬きループの二重起動防止
 
     const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     const wait = ms => new Promise(r => setTimeout(r, ms));
 
-    function setSRGB(tex) {
-      if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
-      else if ('colorSpace' in tex && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-    }
-
-    /* =========================================================
-       3Dモデル（GLB）／2D表示の切替
-       ========================================================= */
-    let modelState = 'loading'; // 'loading' | 'ok' | 'error'
-    let use3D = true;           // 3Dをメイン表示にする
-
-    function applyMode() {
-      const show3D = use3D && modelState === 'ok';
-      group3dEl.setAttribute('visible', show3D);
-      group2dEl.setAttribute('visible', !show3D);
-      window.arState.modelShown = show3D;
-      modeBtn.textContent = use3D ? '🔄 2Dに切替' : '🔄 3Dに切替';
-    }
-
-    // モデルの大きさ・中心を自動で正規化（どんなサイズのGLBでもマーカー上に収まる）
-    function normalizeModel() {
-      const obj = modelEl.getObject3D('mesh');
-      if (!obj) return;
-      obj.updateWorldMatrix(true, true);
-      const inv = new THREE.Matrix4().copy(obj.matrixWorld).invert();
-      const box = new THREE.Box3();
-      const tmp = new THREE.Matrix4();
-      obj.traverse(c => {
-        if (c.isMesh && c.geometry) {
-          if (!c.geometry.boundingBox) c.geometry.computeBoundingBox();
-          const b = c.geometry.boundingBox.clone().applyMatrix4(tmp.multiplyMatrices(inv, c.matrixWorld));
-          box.union(b);
-        }
-      });
-      if (box.isEmpty()) return;
-      const size = new THREE.Vector3(); box.getSize(size);
-      const center = new THREE.Vector3(); box.getCenter(center);
-      const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const s = MODEL_SIZE / maxDim;
-      modelEl.object3D.scale.set(s, s, s);
-      modelEl.object3D.position.set(-center.x * s, -center.y * s, -center.z * s);
-    }
-
-    modelEl.addEventListener('model-loaded', () => {
-      try {
-        normalizeModel();
-        modelState = 'ok';
-        applyMode();
-      } catch (err) {
-        console.error(err);
-        modelState = 'error';
-        applyMode();
-      }
-    });
-
-    modelEl.addEventListener('model-error', (e) => {
-      console.error('GLB load error', e);
-      modelState = 'error';
-      applyMode();
-      statusBar.textContent = '3Dモデルを読み込めませんでした（2D表示）';
-    });
-
-    // 3Dモデルのフェード（バイバイ演出用）。元のマテリアル設定は保存して復元できる
-    function setModelOpacity(o) {
-      const obj = modelEl.getObject3D('mesh');
-      if (!obj) return;
-      obj.traverse(c => {
-        if (!c.isMesh || !c.material) return;
-        const mats = Array.isArray(c.material) ? c.material : [c.material];
-        mats.forEach(m => {
-          if (!m.userData._orig) m.userData._orig = { t: m.transparent, o: m.opacity };
-          if (o >= 1) {
-            m.transparent = m.userData._orig.t;
-            m.opacity = m.userData._orig.o;
-          } else {
-            m.transparent = true;
-            m.opacity = m.userData._orig.o * o;
-          }
-        });
-      });
-    }
-
-    modeBtn.addEventListener('click', () => {
-      if (window.arState.videoOpen) {
-        statusBar.textContent = '動画を閉じてから切り替えてください';
-        return;
-      }
-      use3D = !use3D;
-      applyMode();
-      if (use3D && modelState === 'loading') statusBar.textContent = '3Dモデル読込中...（完了後に切り替わります）';
-      else if (use3D && modelState === 'error') statusBar.textContent = '3Dモデル未読込のため2D表示です';
-      else statusBar.textContent = use3D ? '3D表示にしました' : '2D表示にしました';
-    });
-
-    /* =========================================================
-       ネームプレート（canvasテクスチャ：日本語もOK）
-       ========================================================= */
+    /* ---------- ネームプレート（canvasテクスチャ：日本語もOK） ---------- */
     let nameMesh = null;
     let nameCanvas = null;
     let nameTex = null;
     let currentName = '';
+
+    function setSRGB(tex) {
+      if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+      else if ('colorSpace' in tex && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    }
 
     function ensureNamePlate() {
       if (nameMesh) return;
@@ -487,9 +316,7 @@
       nameMesh.visible = true;
     }
 
-    /* =========================================================
-       キラキラエフェクト（Sprite少数 + 1本のrAF）
-       ========================================================= */
+    /* ---------- キラキラエフェクト（Sprite少数 + 1本のrAF） ---------- */
     let sparkleGroup = null;
     let sparkleTex = null;
     const sparkles = [];
@@ -598,9 +425,7 @@
       requestAnimationFrame(frame);
     }
 
-    /* =========================================================
-       ぽよっアニメーション
-       ========================================================= */
+    /* ---------- ぽよっアニメーション ---------- */
     function playPoyo(duration) {
       return new Promise(resolve => {
         const start = performance.now();
@@ -627,7 +452,7 @@
       });
     }
 
-    // フレーム（画像状態）を切り替える関数：通常 / 目閉じ の2種類（2D表示用）
+    // フレーム（画像状態）を切り替える関数：通常 / 目閉じ の2種類のみ
     function showFrame(type) {
       if (type === 'closed') {
         charNormal.setAttribute('visible', false);
@@ -641,10 +466,6 @@
     // 「触る」ボタンを押したときのリアクション（ぽよっ＋瞬き）
     async function react() {
       if (reacting) return;
-      if (window.arState.videoOpen) {
-        statusBar.textContent = '動画を閉じるとキャラクターが戻ります';
-        return;
-      }
       reacting = true;
       try {
         const poyo = playPoyo(POYO_MS);
@@ -666,16 +487,14 @@
 
     touchBtn.addEventListener('click', react);
 
-    /* =========================================================
-       「✏ 名前」ボタン
-       ========================================================= */
+    /* ---------- 「✏ 名前」ボタン ---------- */
     nameBtn.addEventListener('click', () => {
       const input = window.prompt('キャラクターの名前を入力してください', currentName);
       if (input === null) return; // キャンセル
       const name = input.trim().slice(0, NAME_MAX);
       setCharacterName(name);
       if (name) {
-        if (!window.arState.videoOpen) playSparkles();
+        playSparkles();
         statusBar.textContent = '✨ 「' + name + '」と名付けました！';
       } else {
         hideSparkles();
@@ -683,158 +502,7 @@
       }
     });
 
-    /* =========================================================
-       動画（test.mp4）：初回タップ時に生成する軽量実装
-       - playsinline / webkit-playsinline 指定（iOSで全画面化・フリーズ防止）
-       - ボタン操作(ユーザー操作)内で play() → 音ありが拒否されたらミュートで再試行
-       - マーカーを見失ったら自動で一時停止、再認識で再開
-       - 閉じている間は描画もテクスチャ更新もしない
-       ========================================================= */
-    let videoEl = null;
-    let videoTex = null;
-    let videoMesh = null;
-    let videoOpen = false;
-    let userPaused = false;
-    let userMuted = false;
-
-    function updatePauseBtn() {
-      pauseBtn.textContent = (videoEl && !videoEl.paused) ? '⏸ 一時停止' : '▶ 再生';
-    }
-    function updateMuteBtn() {
-      muteBtn.textContent = userMuted ? '🔇 ミュート' : '🔊 音あり';
-    }
-
-    function videoFail() {
-      statusBar.textContent = '動画を再生できませんでした（test.mp4を確認してください）';
-      closeVideo();
-    }
-
-    function ensureVideo() {
-      if (videoEl) return;
-
-      videoEl = document.createElement('video');
-      videoEl.id = 'ar-movie';
-      videoEl.src = VIDEO_SRC;
-      videoEl.setAttribute('playsinline', '');
-      videoEl.setAttribute('webkit-playsinline', '');
-      videoEl.playsInline = true;
-      videoEl.loop = true;
-      videoEl.muted = userMuted;
-      videoEl.preload = 'auto';
-      videoEl.crossOrigin = 'anonymous';
-      // 画面外・極小・非表示相当で DOM に置く（display:none は一部ブラウザで再生が止まるため避ける）
-      const st = videoEl.style;
-      st.setProperty('position', 'fixed', 'important');
-      st.setProperty('top', '0', 'important');
-      st.setProperty('left', '0', 'important');
-      st.width = '2px';
-      st.height = '2px';
-      st.opacity = '0';
-      st.pointerEvents = 'none';
-      st.zIndex = '-1';
-      document.body.appendChild(videoEl);
-
-      videoTex = new THREE.VideoTexture(videoEl);
-      setSRGB(videoTex);
-      videoTex.generateMipmaps = false;
-      videoTex.minFilter = THREE.LinearFilter;
-      videoTex.magFilter = THREE.LinearFilter;
-
-      const mat = new THREE.MeshBasicMaterial({
-        map: videoTex,
-        side: THREE.DoubleSide,
-        toneMapped: false
-      });
-      videoMesh = new THREE.Mesh(new THREE.PlaneGeometry(VIDEO_WIDTH, VIDEO_WIDTH), mat);
-      videoMesh.scale.set(1, 9 / 16, 1); // 読込後に実寸の縦横比へ更新
-      videoMesh.position.set(0, 0, 0.02);
-      videoMesh.visible = false;
-      targetEl.object3D.add(videoMesh);
-
-      videoEl.addEventListener('loadedmetadata', () => {
-        if (videoEl.videoWidth > 0) {
-          videoMesh.scale.set(1, videoEl.videoHeight / videoEl.videoWidth, 1);
-        }
-      });
-      videoEl.addEventListener('play', updatePauseBtn);
-      videoEl.addEventListener('pause', updatePauseBtn);
-      videoEl.addEventListener('error', () => { if (videoOpen) videoFail(); });
-    }
-
-    function playVideo() {
-      if (!videoEl) return;
-      videoEl.muted = userMuted;
-      let p = null;
-      try { p = videoEl.play(); } catch (e) { p = null; }
-      if (p && p.catch) {
-        p.catch(() => {
-          if (!videoEl.muted) {
-            // 音あり再生が拒否された → ミュートで再試行
-            userMuted = true;
-            videoEl.muted = true;
-            updateMuteBtn();
-            const p2 = videoEl.play();
-            if (p2 && p2.catch) p2.catch(videoFail);
-          } else {
-            videoFail();
-          }
-        });
-      }
-    }
-
-    function openVideo() {
-      if (leaving) return;
-      ensureVideo();
-      videoOpen = true;
-      window.arState.videoOpen = true;
-      userPaused = false;
-      hideSparkles();
-      floaterEl.setAttribute('visible', false); // キャラクターは隠す（描画負荷の軽減）
-      videoMesh.visible = true;
-      videoBtn.textContent = '⏹ 動画を閉じる';
-      videoUi.style.display = 'flex';
-      updateMuteBtn();
-      statusBar.textContent = '🎬 動画を再生中';
-      playVideo(); // ← クリック操作の同期処理内で呼ぶ（iOS対策）
-    }
-
-    function closeVideo() {
-      if (videoEl) videoEl.pause();
-      if (videoMesh) videoMesh.visible = false;
-      videoOpen = false;
-      window.arState.videoOpen = false;
-      userPaused = false;
-      floaterEl.setAttribute('visible', true);
-      videoBtn.textContent = '🎬 動画を見る';
-      videoUi.style.display = 'none';
-    }
-
-    videoBtn.addEventListener('click', () => {
-      if (videoOpen) closeVideo();
-      else openVideo();
-    });
-
-    pauseBtn.addEventListener('click', () => {
-      if (!videoEl) return;
-      if (videoEl.paused) {
-        userPaused = false;
-        playVideo();
-      } else {
-        userPaused = true;
-        videoEl.pause();
-      }
-    });
-
-    muteBtn.addEventListener('click', () => {
-      if (!videoEl) return;
-      userMuted = !userMuted;
-      videoEl.muted = userMuted;
-      updateMuteBtn();
-    });
-
-    /* =========================================================
-       キャラクター状態のリセット（再開始用）
-       ========================================================= */
+    /* ---------- キャラクター状態のリセット（再開始用） ---------- */
     function resetCharacter() {
       poyoEl.object3D.scale.set(1, 1, 1);
       poyoEl.object3D.position.set(0, 0, 0);
@@ -842,26 +510,18 @@
         const mesh = el.getObject3D('mesh');
         if (mesh) mesh.material.opacity = 1;
       });
-      setModelOpacity(1);
       if (nameMesh) nameMesh.material.opacity = 1;
       hideSparkles();
-      closeVideo();
-      applyMode();
       showFrame('normal');
-      leaving = false;
       reacting = false;
     }
 
-    /* =========================================================
-       「バイバイ」ボタン：光の粒子のように消える演出
-       ========================================================= */
+    /* ---------- 「バイバイ」ボタン：光の粒子のように消える演出 ---------- */
     async function byeAndExit() {
       if (reacting) return;
       reacting = true;
-      leaving = true;
       activeBlink = false; // 瞬きを停止
       hideSparkles();
-      if (videoOpen) closeVideo();
 
       const start = performance.now();
       const duration = 1200; // 1.2秒かけて消滅
@@ -875,7 +535,7 @@
           poyoEl.object3D.scale.set(scaleVal, scaleVal, 1);
           poyoEl.object3D.position.set(0, p * 0.8, 0);
 
-          // キャラクター画像・3Dモデル・ネームプレートの透明度を下げて消えるようにする
+          // キャラクター画像およびネームプレートの透明度を下げて消えるようにする
           [charNormal, charClosed].forEach(el => {
             const mat = el.getObject3D('mesh');
             if (mat) {
@@ -883,7 +543,6 @@
               mat.material.opacity = 1 - p;
             }
           });
-          setModelOpacity(1 - p);
           if (nameMesh) nameMesh.material.opacity = 1 - p;
 
           if (p < 1) {
@@ -892,9 +551,7 @@
             // 演出終了後にARを完全停止して最初の画面に戻す
             const arSystem = sceneEl.systems['mindar-image-system'];
             arSystem.stop();
-            window.arState.targetVisible = false;
             actionUi.style.display = 'none';
-            videoUi.style.display = 'none';
             overlay.style.display = 'flex';
             statusBar.textContent = 'ARを終了しました';
             statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
@@ -907,16 +564,14 @@
 
     byeBtn.addEventListener('click', byeAndExit);
 
-    /* =========================================================
-       自動瞬き（常時ループ。2D表示のコマ切替）
-       ========================================================= */
+    /* ---------- 自動瞬き（常時ループ） ---------- */
     async function startBlinking() {
       const myToken = ++blinkToken; // 古いループは自動的に終了する
       while (activeBlink && myToken === blinkToken) {
         const randomWait = Math.random() * 2000 + 2000;
         await wait(randomWait);
 
-        if (!reacting && activeBlink && myToken === blinkToken && !window.arState.modelShown && !videoOpen) {
+        if (!reacting && activeBlink && myToken === blinkToken) {
           reacting = true;
           showFrame('closed');
           await wait(150);
@@ -926,9 +581,7 @@
       }
     }
 
-    /* =========================================================
-       AR起動
-       ========================================================= */
+    /* ---------- AR起動 ---------- */
     startBtn.addEventListener('click', async () => {
       statusBar.textContent = 'カメラ初期化中...';
       const arSystem = sceneEl.systems['mindar-image-system'];
@@ -951,19 +604,13 @@
     });
 
     targetEl.addEventListener('targetFound', () => {
-      window.arState.targetVisible = true;
       statusBar.textContent = '★ マーカー認識中！ ボタンを押してね';
       statusBar.style.background = 'rgba(22, 163, 74, 0.85)';
-      // 動画表示中なら再開（ユーザーが一時停止していない場合のみ）
-      if (videoOpen && videoEl && videoEl.paused && !userPaused) playVideo();
     });
 
     targetEl.addEventListener('targetLost', () => {
-      window.arState.targetVisible = false;
       statusBar.textContent = 'マーカーを見失いました';
       statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
-      // マーカーが外れている間は動画を止めて負荷・音を抑える
-      if (videoOpen && videoEl && !videoEl.paused) videoEl.pause();
     });
   </script>
 </body>
