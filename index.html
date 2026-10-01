@@ -184,19 +184,19 @@
             src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-        </a-entity>
+          <!-- 名前プレート（キャラクターの真下・少し手前に配置） -->
+          <a-text 
+            id="char-name"
+            value="" 
+            position="0 -0.58 0.05" 
+            align="center" 
+            color="#ffffff" 
+            scale="0.7 0.7 0.7"
+            visible="false"
+            side="double">
+          </a-text>
 
-        <!-- 名前プレート（ぽよぽよで歪まないよう、親を分けてキャラクターの「真下」に固定） -->
-        <a-text 
-          id="char-name"
-          value="" 
-          position="0 -0.65 0" 
-          align="center" 
-          color="#ffffff" 
-          scale="0.8 0.8 0.8"
-          visible="false"
-          side="double">
-        </a-text>
+        </a-entity>
 
       </a-entity>
 
@@ -311,19 +311,13 @@
       charName.setAttribute('value', '');
       charName.setAttribute('visible', false);
 
-      [charNormal, charClosed].forEach(el => {
+      [charNormal, charClosed, charName].forEach(el => {
         const mat = el.getObject3D('mesh');
         if (mat && mat.material) {
           mat.material.transparent = true;
           mat.material.opacity = 1.0;
         }
       });
-      // 名前プレートの透明度もリセット
-      const nameMat = charName.getObject3D('mesh');
-      if (nameMat && nameMat.material) {
-        nameMat.material.transparent = true;
-        nameMat.material.opacity = 1.0;
-      }
     }
 
     async function byeAndExit() {
@@ -342,19 +336,13 @@
           poyoEl.object3D.scale.set(scaleVal, scaleVal, 1);
           poyoEl.object3D.position.set(0, p * 0.8, 0);
 
-          [charNormal, charClosed].forEach(el => {
+          [charNormal, charClosed, charName].forEach(el => {
             const mat = el.getObject3D('mesh');
             if (mat && mat.material) {
               mat.material.transparent = true;
               mat.material.opacity = 1 - p;
             }
           });
-
-          const nameMat = charName.getObject3D('mesh');
-          if (nameMat && nameMat.material) {
-            nameMat.material.transparent = true;
-            nameMat.material.opacity = 1 - p;
-          }
 
           if (p < 1) {
             requestAnimationFrame(particleFrame);
@@ -375,7 +363,7 @@
       });
     }
 
-    byeBtn.addEventListener('click', byeAndExit);
+    byeBtn.appendEvent?.('click', byeAndExit) || byeBtn.addEventListener('click', byeAndExit);
 
     async function startBlinking() {
       while (activeBlink) {
@@ -416,7 +404,7 @@
     });
 
     targetEl.addEventListener('targetLost', () => {
-      statusBar.textContent, statusBar.textContent = 'マーカーを見失いました';
+      statusBar.textContent = 'マーカーを見失いました';
       statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
     });
   </script>
