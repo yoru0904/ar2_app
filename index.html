@@ -164,7 +164,6 @@
     <a-assets>
       <img id="tex-normal" src="./image/test.png" crossorigin="anonymous">
       <img id="tex-closed" src="./image/test2.png" crossorigin="anonymous">
-      <img id="tex-excl"   src="./image/test3.png" crossorigin="anonymous">
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -191,11 +190,6 @@
             src="#tex-closed" position="0 0 0" width="1" height="1" visible="false"
             material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
 
-          <!-- 「！」（test3.png。初期は非表示） -->
-          <a-plane id="excl"
-            src="#tex-excl" position="5 3 0.01" width="1" height="1" visible="false"
-            material="transparent: true; alphaTest: 0.1; side: double;"></a-plane>
-
         </a-entity>
       </a-entity>
 
@@ -213,7 +207,6 @@
     const poyoEl     = document.querySelector('#poyo');
     const charNormal = document.querySelector('#char-normal');
     const charClosed = document.querySelector('#char-closed');
-    const exclEl     = document.querySelector('#excl');
 
     const touchBtn   = document.querySelector('#touch-btn');
     const nameBtn    = document.querySelector('#name-btn');
@@ -222,7 +215,6 @@
     const THREE = AFRAME.THREE;
 
     /* ---------- 調整用の設定 ---------- */
-    const REACTION_MS = 1400;   // 「！」リアクション時間
     const POYO_MS     = 1000;   // ぽよっ動作の長さ
     const NAME_MAX    = 12;     // 名前の最大文字数
     const SPARKLE_N   = 18;     // キラキラの数（増やしすぎ注意）
@@ -248,6 +240,7 @@
     let nameMesh = null;
     let nameCanvas = null;
     let nameTex = null;
+    let currentName = '';
 
     function setSRGB(tex) {
       if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
@@ -313,6 +306,7 @@
 
     function setCharacterName(name) {
       ensureNamePlate();
+      currentName = name;
       if (!name) {
         nameMesh.visible = false;
         return;
@@ -458,35 +452,31 @@
       });
     }
 
-    // フレーム（画像状態）を切り替える関数
+    // フレーム（画像状態）を切り替える関数：通常 / 目閉じ の2種類のみ
     function showFrame(type) {
-      if (type === 'normal') {
+      if (type === 'closed') {
+        charNormal.setAttribute('visible', false);
+        charClosed.setAttribute('visible', true);
+      } else {
         charNormal.setAttribute('visible', true);
         charClosed.setAttribute('visible', false);
-        exclEl.setAttribute('visible', false);
-      } else if (type === 'closed') {
-        charNormal.setAttribute('visible', false);
-        charClosed.setAttribute('visible', true);
-        exclEl.setAttribute('visible', false);
-      } else if (type === 'excl') {
-        charNormal.setAttribute('visible', false);
-        charClosed.setAttribute('visible', true);
-        exclEl.setAttribute('visible', true); // test3.png (!) を表示
       }
     }
 
-    // 「触る」ボタンを押したときのリアクション（！）
+    // 「触る」ボタンを押したときのリアクション（ぽよっ＋瞬き）
     async function react() {
       if (reacting) return;
       reacting = true;
       try {
-        showFrame('normal');
-        await wait(150);
+        const poyo = playPoyo(POYO_MS);
         showFrame('closed');
         await wait(150);
-        showFrame('excl'); // 「！」マークを表示
-
-        await Promise.all([playPoyo(POYO_MS), wait(REACTION_MS)]);
+        showFrame('normal');
+        await wait(120);
+        showFrame('closed');
+        await wait(150);
+        showFrame('normal');
+        await poyo;
       } finally {
         showFrame('normal');
         poyoEl.object3D.scale.set(1, 1, 1);
@@ -499,12 +489,9 @@
 
     /* ---------- 「✏ 名前」ボタン ---------- */
     nameBtn.addEventListener('click', () => {
-      const current = nameMesh && nameMesh.visible ? (nameMesh.userData.name || '') : '';
-      const input = window.prompt('キャラクターの名前を入力してください', current);
+      const input = window.prompt('キャラクターの名前を入力してください', currentName);
       if (input === null) return; // キャンセル
       const name = input.trim().slice(0, NAME_MAX);
-      ensureNamePlate();
-      nameMesh.userData.name = name;
       setCharacterName(name);
       if (name) {
         playSparkles();
@@ -519,7 +506,7 @@
     function resetCharacter() {
       poyoEl.object3D.scale.set(1, 1, 1);
       poyoEl.object3D.position.set(0, 0, 0);
-      [charNormal, charClosed, exclEl].forEach(el => {
+      [charNormal, charClosed].forEach(el => {
         const mesh = el.getObject3D('mesh');
         if (mesh) mesh.material.opacity = 1;
       });
@@ -549,13 +536,11 @@
           poyoEl.object3D.position.set(0, p * 0.8, 0);
 
           // キャラクター画像およびネームプレートの透明度を下げて消えるようにする
-          [charNormal, charClosed, exclEl].forEach(el => {
-            if (el) {
-              const mat = el.getObject3D('mesh');
-              if (mat) {
-                mat.material.transparent = true;
-                mat.material.opacity = 1 - p;
-              }
+          [charNormal, charClosed].forEach(el => {
+            const mat = el.getObject3D('mesh');
+            if (mat) {
+              mat.material.transparent = true;
+              mat.material.opacity = 1 - p;
             }
           });
           if (nameMesh) nameMesh.material.opacity = 1 - p;
